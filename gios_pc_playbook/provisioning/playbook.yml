@@ -1,0 +1,124 @@
+---
+- hosts : all
+  become: true
+ 
+  pre_tasks:
+
+    - name: Update and upgrade apt pkgs
+      apt:
+        upgrade: yes
+        update_cache: yes
+        cache_valid_time: 86400
+      register: apt
+
+    - debug: msg={{ apt.stdout.split('\n')[:-1] }}
+    
+
+    - name: install required packages
+      package: name={{item}} state=present update_cache=yes
+      with_items:
+        - htop
+        - tmux
+        - tree
+        - figlet
+        - python3-pip
+        - vim
+#        - i3
+        - screenfetch
+        - fortune
+        - cowsay
+        - irssi
+        - feh
+        - w3m
+#        - terminator
+        - git
+      register: package_out
+
+    - debug: 
+        var: package_out
+
+    - name: create 'gio' user!
+      user: 
+        name: gio
+        shell: /bin/bash
+        groups: admin
+        append: yes
+
+
+
+
+  vars:
+    pip_install_packages:
+        - name: awscli 
+        - name: glances
+        - name: docker
+        - name: rtv  
+
+    vars_files:
+        - vars/main.yml
+
+    myAliases: "{{ lookup('file', '/home/giof/alias_list')}}"
+#    mySessh: "{{ lookup('file'. '/home/giof/sshrc_list')}}"
+      
+
+  tasks:
+
+
+    - name: create /etc/bashrc
+      file:
+        path: /etc/bashrc
+        state: touch
+        owner: root
+        group: root
+        mode: 0775
+
+    - name: create ~/.ssh/rc
+      file:
+        path: /home/vagrant/.ssh/rc
+        state: touch
+        owner: vagrant
+        group: vagrant
+        mode: 0775
+
+    - name: add sshrc
+      copy:
+        src: /home/giof/sshrc_list
+        dest: /home/vagrant/.ssh/rc
+        owner: vagrant
+        group: vagrant
+        mode: 0775
+
+
+    - name: my Aliases into /etc/bashrc 
+      blockinfile: 
+        path: /etc/bashrc
+        marker: "# {mark} Added by Ansible o/ #####"
+        block: "{{ myAliases }}"
+
+    - name: my Aliases into /home/vagrant/.bashrc 
+      blockinfile: 
+        path: /home/vagrant/.bashrc
+        marker: "# {mark} Added by Ansible o/ #####"
+        block: "{{ myAliases }}"
+
+    - name: create .vim/
+      file:
+        path: /home/vagrant/.vim
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: 0775
+
+    - name: add vimrc
+      copy:
+        src: /home/giof/vimrc_list
+        dest: /home/vagrant/.vim/vimrc
+        owner: vagrant
+        group: vagrant
+        mode: 0775
+
+
+  roles:
+#    - geerlingguy.repo-epel
+    - geerlingguy.pip
+    - geerlingguy.firewall
