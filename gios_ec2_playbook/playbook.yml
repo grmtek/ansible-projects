@@ -1,0 +1,163 @@
+---
+- name: Launch a t2.micro instance
+  hosts: localhost
+  gather_facts: False
+  vars:
+    keypair: gmoney
+    instance_type: t2.micro
+    security_group_id: sg-042607efae4aa6280
+    image: ami-00c5e6b01cfd8116a
+    region: ca-central-1
+  
+  tasks: 
+    - name: Run instance
+      ec2:
+         key_name: "{{ keypair }}"
+         group_id: "{{ security_group_id }}"
+         instance_type: "{{ instance_type }}"
+         image: "{{ image }}"
+         wait: true
+         region: "{{ region }}"
+         vpc_subnet_id: subnet-ac73edc4
+         assign_public_ip: yes
+      register: ec2
+
+    - name: Add new instance to host group
+      add_host:
+        hostname: "{{ item.public_ip }}"
+        groupname: launched
+      loop: "{{ ec2.instances }}"
+
+    - name: Wait for SSH to come up
+      delegate_to: "{{ item.public_dns_name }}"
+      wait_for_connection:
+        delay: 60
+        timeout: 320
+      loop: "{{ ec2.instances }}"
+
+
+- name: Configure instance(s)
+  hosts: launched
+  become: True
+  become_method: sudo
+#  gather_facts: True
+
+  pre_tasks:
+
+    - name: Update and upgrade apt pkgs
+      apt:
+        upgrade: yes
+        update_cache: yes
+        cache_valid_time: 86400
+      register: apt
+
+    - debug: msg={{ apt.stdout.split('\n')[:-1] }}
+    
+
+    - name: install required packages
+      package: name={{item}} state=present update_cache=yes
+      with_items:
+        - htop
+        - tmux
+        - tree
+        - figlet
+        - python3-pip
+        - vim
+#        - i3
+        - screenfetch
+        - fortune
+        - cowsay
+        - irssi
+        - feh
+        - w3m
+#        - terminator
+        - git
+      register: package_out
+
+    - debug: 
+        var: package_out
+
+    - name: create 'gio' user!
+      user: 
+        name: gio
+        shell: /bin/bash
+        groups: admin
+        append: yes
+
+
+
+
+  vars:
+    pip_install_packages:
+        - name: awscli 
+        - name: glances
+        - name: docker
+        - name: rtv  
+
+
+    myAliases: "{{ lookup('file', '/home/giof/alias_list')}}"
+#    mySessh: "{{ lookup('file'. '/home/giof/sshrc_list')}}"
+      
+
+  tasks:
+
+
+    - name: create /etc/bashrc
+      file:
+        path: /etc/bashrc
+        state: touch
+        owner: root
+        group: root
+        mode: 0775
+
+    - name: create ~/.ssh/rc
+      file:
+        path: /home/ubuntu/.ssh/rc
+        state: touch
+        owner: ubuntu
+        group: ubuntu
+        mode: 0775
+
+    - name: add sshrc
+      copy:
+        src: /home/giof/sshrc_list
+        dest: /home/ubuntu/.ssh/rc
+        owner: ubuntu
+        group: ubuntu
+        mode: 0775
+
+
+    - name: my Aliases into bashrc 
+      blockinfile: 
+        path: /home/ubuntu/.bashrc
+        marker: "# {mark} Added by Ansible o/ #####"
+        block: "{{ myAliases }}"
+
+    - name: my Aliases into /home/ubuntu/.bashrc 
+      blockinfile: 
+        path: /home/ubuntu/.bashrc
+        marker: "# {mark} Added by Ansible o/ #####"
+        block: "{{ myAliases }}"
+
+    - name: create .vim/
+      file:
+        path: /home/ubuntu/.vim
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: 0775
+
+    - name: add vimrc
+      copy:
+        src: /home/giof/vimrc_list
+        dest: /home/ubuntu/.vim/vimrc
+        owner: ubuntu
+        group: ubuntu
+        mode: 0775
+
+
+  roles:
+#    - geerlingguy.repo-epel
+    - geerlingguy.pip
+
+
